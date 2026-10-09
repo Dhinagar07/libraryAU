@@ -1,3 +1,7 @@
+import csv
+import os
+
+
 class Book:
     def __init__(self, title, author, copies):
         if copies < 1:
@@ -18,6 +22,11 @@ class Book:
             raise ValueError("Copy count must be at least one")
         self.__copies += count
         self.__available += count
+
+    def set_available(self, count):
+        if count < 0 or count > self.__copies:
+            raise ValueError("Available copies must be between 0 and owned copies")
+        self.__available = count
 
     def borrow_copy(self):
         if self.__available == 0:
@@ -53,9 +62,7 @@ class Library:
         book = self.find(title)
         if book is not None:
             book.add_copies(copies)
-            print(
-                f'"{title}" is already here - copies raised to {book.get_copies()}'
-            )
+            print(f'"{title}" is already here - copies raised to {book.get_copies()}')
             return book
         book = Book(title, author, copies)
         self.books.append(book)
@@ -93,23 +100,133 @@ class Library:
         return True
 
 
+FIELDS = ["library", "title", "author", "copies", "on_shelf"]
+
+
+def save_libraries(libraries, path):
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(FIELDS)
+        for library in libraries.values():
+            for book in library.books:
+                writer.writerow(
+                    [
+                        library.name,
+                        book.title,
+                        book.author,
+                        book.get_copies(),
+                        book.get_available(),
+                    ]
+                )
+    total = sum(len(library.books) for library in libraries.values())
+    print(f"Saved {total} entries to {path}")
+
+
+def load_libraries(path):
+    libraries = {}
+    if not os.path.exists(path):
+        print(f"No file at {path} - starting empty")
+        return libraries
+    with open(path, newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            library = libraries.get(row["library"])
+            if library is None:
+                library = Library(row["library"])
+                libraries[library.name] = library
+            book = Book(row["title"], row["author"], int(row["copies"]))
+            book.set_available(int(row["on_shelf"]))
+            library.books.append(book)
+    print(f"Loaded {len(libraries)} libraries from {path}")
+    return libraries
+
+
+def pick_library(libraries):
+    if not libraries:
+        print("No libraries yet - add one first")
+        return None
+    names = list(libraries)
+    for index, name in enumerate(names, start=1):
+        print(f"{index}. {name}")
+    choice = input("Pick a library number: ").strip()
+    if not choice.isdigit() or not 1 <= int(choice) <= len(names):
+        print("Invalid choice")
+        return None
+    return libraries[names[int(choice) - 1]]
+
+
+def main():
+    path = "libraries.csv"
+    libraries = load_libraries(path)
+
+    menu = (
+        "\n1. Add library\n"
+        "2. Add book\n"
+        "3. View entries\n"
+        "4. Borrow book\n"
+        "5. Return book\n"
+        "6. Save to CSV\n"
+        "7. Reload from CSV\n"
+        "0. Save and exit\n"
+    )
+
+    while True:
+        print(menu)
+        choice = input("Choose: ").strip()
+
+        if choice == "1":
+            name = input("Library name: ").strip()
+            if not name:
+                print("Name cannot be empty")
+            elif name in libraries:
+                print("That library already exists")
+            else:
+                libraries[name] = Library(name)
+                print(f"Added library {name}")
+
+        elif choice == "2":
+            library = pick_library(libraries)
+            if library is None:
+                continue
+            title = input("Title: ").strip()
+            author = input("Author: ").strip()
+            count = input("Copies: ").strip()
+            if not (title and author and count.isdigit() and int(count) > 0):
+                print("Title, author and a positive copy count are required")
+                continue
+            library.add_book(title, author, int(count))
+
+        elif choice == "3":
+            if not libraries:
+                print("No libraries yet")
+            for library in libraries.values():
+                library.show_all()
+
+        elif choice == "4":
+            library = pick_library(libraries)
+            if library is None:
+                continue
+            library.borrow_book(input("Title: ").strip())
+
+        elif choice == "5":
+            library = pick_library(libraries)
+            if library is None:
+                continue
+            library.return_book(input("Title: ").strip())
+
+        elif choice == "6":
+            save_libraries(libraries, path)
+
+        elif choice == "7":
+            libraries = load_libraries(path)
+
+        elif choice == "0":
+            save_libraries(libraries, path)
+            print("Bye")
+            break
+
+        else:
+            print("Unknown option")
+
+
 if __name__ == "__main__":
-    library = Library("College Library")
-
-    library.add_book("a", "H", 1)
-    library.add_book("a", "H", 1)
-    library.add_book("C", "R", 2)
-    library.show_all()
-
-    print()
-    library.borrow_book("Ikigai")
-    library.borrow_book("Ikigai")
-    library.borrow_book("The Hobbit")
-
-    print()
-    library.return_book("Ikigai")
-    library.return_book("Ikigai")
-    library.return_book("Ikigai")
-
-    print()
-    library.show_all()
+    main()
